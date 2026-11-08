@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Documentation only: per-gear speed and obstacle-detection endpoints, the
+  speed mapping (bridge 40-100 to app 0-100%), power-type values, and the
+  finding that routines are not exposed locally. See `docs/PROTOCOL.md`.
+
 ## 0.2.0
 
 - `RyseBridge.async_get_device()` now fetches the detailed

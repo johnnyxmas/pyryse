@@ -67,6 +67,38 @@ after issuing a move rather than assuming it completes immediately.
 | wrong body key (e.g. `pos`) / non-numeric position | `405` |
 | malformed JSON body | `500` (parsed before routing) |
 
+## Per-gear settings (verified 2026-11-08, firmware 5.3.2)
+
+| setting | read | write | notes |
+|---|---|---|---|
+| `speed` (0-100 %) | `GET .../gear/<id>/speed` -> `{"speed":N}` | `POST .../gear/<id>/speed` body `{"speed":N}` | Accepted bridge range is 40-100; writes of 0, 10, 20, 39 and 150 are rejected with 405. The app's percentage is linear over that range: app % = (bridge - 40) / 60 * 100, so bridge = 40 + 0.6 * app %. Verified against the app: bridge 40 = 0%, 41 = 1%, 70 = 50%, 100 = 100%. Each gear has its own value. |
+| `obstacle_detection` (on/off) | `GET .../gear/<id>/obstacle_detection` -> `{"obstacle_detection":N}` | `POST .../gear/<id>/obstacle_detection` body `{"obstacle_detection":0\|1}` | Accepted 0 and 1. |
+
+**Settings apply after a delay of a few seconds.** A read immediately after a
+write can return the previous value. Poll before concluding a write failed.
+
+Per the RYSE app's behaviour (not independently verified here): on firmware
+before 5.0.2, setting `speed` above 66 % disables obstacle detection. All gears
+here run 5.3.2, so this rule was not tested.
+
+## Other gear and device fields
+
+- `power_type`: 2 on every gear. Battery is the likely meaning, since gears report
+  `power_level`, but this is unconfirmed.
+- `machine_state`: 3 on every gear, unchanged across the sweep. Meaning unknown.
+- `gear_type`: 2 on every gear. Meaning unknown.
+- `stats`: `{"gear_not_found": 0}` on every gear.
+- `ifttt_enable`: false. `dvc_wan_iface`: "Ethernet". Read-only in this pass.
+- `dvc_app_version`: bnrf 5.2.15, homekit 4.2.6, lua/mqttc/nrfi 5.2.0.
+
+## Routines (scenes): not found locally
+
+About 15 guessed GET paths (`routines`, `scenes`, `routine`, `routinelist`,
+`automation`, `action`, and variants under the device and `/lua/`) all return
+405. The setup page's own JavaScript uses only `/lua/device`, `wifiscan` and
+`wificonf`. Routines are probably stored and run by the app or the cloud.
+Confirming this needs a capture of the app creating and running a routine.
+
 ## Other endpoints (not used by pyryse)
 
 The setup page also uses `GET /lua/device/<dvc_id>/wifiscan` and

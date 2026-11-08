@@ -46,6 +46,25 @@ The bridge's `position` is the **inverse** of Home Assistant's cover scale:
 if you need HA semantics. See [`docs/PROTOCOL.md`](docs/PROTOCOL.md) for the full
 reverse-engineered API.
 
+## Per-gear settings
+
+Each gear also has a speed and an obstacle-detection setting, read and written
+through the bridge. The library doesn't wrap these yet; the endpoints are in
+[`docs/PROTOCOL.md`](docs/PROTOCOL.md).
+
+- **Speed:** the bridge accepts 40-100. The app shows 0-100%, linear over that
+  range: `app % = (bridge - 40) / 60 * 100`, so `bridge = 40 + 0.6 * app %`.
+  Values outside 40-100 are rejected.
+- **Obstacle detection:** on or off per gear.
+- **Power type:** `power_type` is 2 on battery, 0 on AC adapter and 1 on a USB
+  charger (inferred from observed changes).
+
+Settings take a few seconds to apply, so read back after a short delay before
+assuming a write failed.
+
+**Routines** (the app's name for scenes) are not available through the local
+API. Their endpoints are not known.
+
 ## License
 
 MIT
