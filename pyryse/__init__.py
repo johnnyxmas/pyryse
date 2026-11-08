@@ -12,10 +12,13 @@ from .exceptions import (
 from .models import (
     SPEED_MAX,
     SPEED_MIN,
+    WIFI_SECURITY,
     Device,
     Gear,
     GearState,
     PowerType,
+    WifiNetwork,
+    WifiStatus,
     percent_to_speed,
     speed_to_percent,
 )
@@ -28,6 +31,9 @@ __all__ = [
     "PowerType",
     "SPEED_MIN",
     "SPEED_MAX",
+    "WIFI_SECURITY",
+    "WifiNetwork",
+    "WifiStatus",
     "speed_to_percent",
     "percent_to_speed",
     "RyseError",
@@ -36,4 +42,4 @@ __all__ = [
     "RyseNotFoundError",
 ]
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"

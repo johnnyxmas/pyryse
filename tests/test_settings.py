@@ -211,3 +211,91 @@ def test_device_without_version_dict():
     device = Device.from_dict({"dvc_id": DVC, "gears": []})
     assert device.app_versions == {}
     assert device.app_version is None
+
+
+from pyryse import WIFI_SECURITY, WifiNetwork, WifiStatus  # noqa: E402
+
+WIFICONF_URL = f"http://{HOST}/lua/device/{DVC}/wificonf"
+WIFISCAN_URL = f"http://{HOST}/lua/device/{DVC}/wifiscan"
+
+
+async def test_get_wifi_status(session):
+    with aioresponses() as m:
+        m.get(LIST_URL, payload=LIST_PAYLOAD)
+        m.get(WIFICONF_URL, payload={
+            "ssid": "LabNet", "connected": True, "ipv4address": "192.168.0.123"})
+        bridge = RyseBridge(HOST, session)
+        status = await bridge.async_get_wifi_status()
+    assert isinstance(status, WifiStatus)
+    assert status.ssid == "LabNet"
+    assert status.connected is True
+    assert status.ip_address == "192.168.0.123"
+
+
+def test_wifi_status_never_exposes_a_password_in_repr():
+    # The read endpoint has no password field; repr must stay safe regardless.
+    status = WifiStatus.from_dict({"ssid": "x", "connected": True})
+    assert "password" not in repr(status).lower()
+
+
+async def test_wifi_scan_parses_results(session):
+    with aioresponses() as m:
+        m.get(LIST_URL, payload=LIST_PAYLOAD)
+        m.get(WIFISCAN_URL, payload={"results": [
+            {"ssid": "A", "bssid": "B8:9", "channel": 6, "signal": -55,
+             "quality": 35, "quality_max": 70,
+             "encryption": {"enabled": True, "wpa": [2, 3],
+                            "authentication": ["psk", "sae"], "ciphers": ["ccmp"]}},
+            {"ssid": "B", "encryption": {"enabled": False}},
+        ]})
+        bridge = RyseBridge(HOST, session)
+        nets = await bridge.async_wifi_scan()
+    assert [n.ssid for n in nets] == ["A", "B"]
+    assert isinstance(nets[0], WifiNetwork)
+    assert nets[0].channel == 6
+    assert nets[0].signal == -55
+    assert nets[0].security == "WPA2/WPA3"
+    assert nets[0].quality_percent == 50
+    assert nets[1].security == "Open"
+
+
+async def test_wifi_scan_tolerates_empty(session):
+    with aioresponses() as m:
+        m.get(LIST_URL, payload=LIST_PAYLOAD)
+        m.get(WIFISCAN_URL, payload={"results": []})
+        bridge = RyseBridge(HOST, session)
+        assert await bridge.async_wifi_scan() == []
+
+
+async def test_set_wifi_config_builds_body(session):
+    with aioresponses() as m:
+        m.get(LIST_URL, payload=LIST_PAYLOAD)
+        m.post(WIFICONF_URL, status=200, body="")
+        bridge = RyseBridge(HOST, session)
+        await bridge.async_set_wifi_config(
+            "LabNet", password="pw", security="WPA2")
+        body = [c[0].kwargs["json"] for c in _posts(m)][0]
+    assert body == {"ssid": "LabNet", "key": "pw", "security": "WPA2"}
+
+
+async def test_set_wifi_config_minimal_body(session):
+    with aioresponses() as m:
+        m.get(LIST_URL, payload=LIST_PAYLOAD)
+        m.post(WIFICONF_URL, status=200, body="")
+        bridge = RyseBridge(HOST, session)
+        await bridge.async_set_wifi_config("Open")
+        assert [c[0].kwargs["json"] for c in _posts(m)][0] == {"ssid": "Open"}
+
+
+async def test_set_wifi_config_rejects_bad_security(session):
+    with aioresponses() as m:
+        bridge = RyseBridge(HOST, session)
+        with pytest.raises(ValueError, match="security must be one of"):
+            await bridge.async_set_wifi_config("x", security="WEP")
+        assert not m.requests
+
+
+def test_wifi_security_values():
+    assert "WPA2" in WIFI_SECURITY
+    assert "None" in WIFI_SECURITY
+    assert "WEP" not in WIFI_SECURITY

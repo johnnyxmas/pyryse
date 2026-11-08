@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.0
+
+- Added Wi-Fi support (the bridge runs Wi-Fi and Ethernet at once, so these
+  work over a wired connection): `async_get_wifi_status`, `async_wifi_scan` and
+  `async_set_wifi_config`, with `WifiStatus`, `WifiNetwork` and the
+  `WIFI_SECURITY` set. `WifiNetwork.security` summarises the encryption object
+  as `Open`/`WPA2`/`WPA2/WPA3`/etc., and `quality_percent` normalises the link
+  quality. The read endpoint returns only the current connection (SSID,
+  connected, IP) - the bridge does not expose the stored password.
+- `docs/PROTOCOL.md` documents the real `wifiscan` and `wificonf` response
+  shapes.
+
 ## 0.3.0
 
 - Added `async_get_speed`, `async_set_speed`, `async_get_speed_percent` and

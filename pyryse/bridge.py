@@ -15,8 +15,11 @@ from .exceptions import (
 from .models import (
     SPEED_MAX,
     SPEED_MIN,
+    WIFI_SECURITY,
     Device,
     Gear,
+    WifiNetwork,
+    WifiStatus,
     percent_to_speed,
     speed_to_percent,
 )
@@ -154,6 +157,60 @@ class RyseBridge:
             f"/lua/device/{dvc}/gear/{gear_id}/obstacle_detection",
             json={"obstacle_detection": 1 if enabled else 0},
         )
+
+    async def async_wifi_scan(self) -> list[WifiNetwork]:
+        """List nearby Wi-Fi networks the bridge can see.
+
+        The bridge supports Wi-Fi and Ethernet at once, so this is safe to call
+        over a wired connection.
+        """
+        dvc = await self._ensure_device_id()
+        data = await self._request("GET", f"/lua/device/{dvc}/wifiscan")
+        if isinstance(data, dict):
+            data = data.get("results") or []
+        if not isinstance(data, list):
+            return []
+        return [WifiNetwork.from_dict(x) for x in data if isinstance(x, dict)]
+
+    async def async_get_wifi_status(self) -> WifiStatus:
+        """Read the bridge's current Wi-Fi connection (SSID, connected, IP).
+
+        The bridge does not expose the stored password, so there is none to
+        read back. Safe to call over Ethernet.
+        """
+        dvc = await self._ensure_device_id()
+        data = await self._request("GET", f"/lua/device/{dvc}/wificonf")
+        if not isinstance(data, dict):
+            raise RyseResponseError("Unexpected wificonf response")
+        return WifiStatus.from_dict(data)
+
+    async def async_set_wifi_config(
+        self,
+        ssid: str,
+        *,
+        password: str | None = None,
+        security: str | None = None,
+        username: str | None = None,
+    ) -> None:
+        """Set the bridge's Wi-Fi network.
+
+        ``security`` is one of :data:`WIFI_SECURITY` (or ``None`` to let the
+        bridge decide). Safe to call over Ethernet, which stays up regardless;
+        a wrong SSID/password only affects the Wi-Fi link, not the wired one.
+        """
+        if security is not None and security not in WIFI_SECURITY:
+            raise ValueError(
+                f"security must be one of {sorted(WIFI_SECURITY)}, got {security!r}"
+            )
+        dvc = await self._ensure_device_id()
+        body: dict[str, Any] = {"ssid": ssid}
+        if password is not None:
+            body["key"] = password
+        if username is not None:
+            body["username"] = username
+        if security is not None:
+            body["security"] = security
+        await self._request("POST", f"/lua/device/{dvc}/wificonf", json=body)
 
     async def _gear_get(self, gear_id: str, setting: str) -> Any:
         dvc = await self._ensure_device_id()

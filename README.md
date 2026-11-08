@@ -85,6 +85,24 @@ gear.power_source is PowerType.BATTERY
 **Routines** (the app's name for scenes) are not available through the local
 API. Their endpoints are not known.
 
+## Wi-Fi
+
+The bridge supports Wi-Fi and Ethernet at once, so these work over either.
+
+```python
+# Current Wi-Fi connection (no password is exposed by the API).
+status = await bridge.async_get_wifi_status()
+print(status.ssid, status.connected, status.ip_address)
+
+# Scan for nearby networks.
+for net in await bridge.async_wifi_scan():
+    print(net.ssid, net.security, net.signal, net.quality_percent)
+
+# Join a network. Ethernet stays up regardless, so a wrong value only
+# affects the Wi-Fi link on a wired bridge.
+await bridge.async_set_wifi_config("MySSID", password="...", security="WPA2")
+```
+
 ## License
 
 MIT

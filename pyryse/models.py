@@ -23,6 +23,11 @@ from typing import Any
 SPEED_MIN = 40
 SPEED_MAX = 100
 
+#: Valid values for async_set_wifi_config(security=...).
+WIFI_SECURITY = frozenset(
+    {"None", "WPA", "WPA2", "WPA3", "WPA-Enterprise", "WPA2-Enterprise"}
+)
+
 
 def speed_to_percent(speed: int) -> int:
     """Convert a bridge speed (40-100) to the RYSE app's percentage (0-100).
@@ -215,6 +220,86 @@ class Device:
             gears=[Gear.from_dict(g) for g in data.get("gears", []) if g.get("id")],
             raw=data,
         )
+
+
+@dataclass(slots=True)
+class WifiNetwork:
+    """A nearby Wi-Fi network from a scan (`wifiscan` ``results`` item)."""
+
+    ssid: str
+    bssid: str | None = None
+    #: Raw encryption object, e.g. ``{"enabled": True, "wpa": [2, 3],
+    #: "authentication": ["psk", "sae"], "ciphers": ["ccmp"]}``.
+    encryption: dict[str, Any] | None = None
+    channel: int | None = None
+    signal: int | None = None
+    quality: int | None = None
+    quality_max: int | None = None
+    raw: dict[str, Any] = field(default_factory=dict, repr=False)
+
+    @property
+    def security(self) -> str:
+        """A short readable label like ``Open``, ``WPA2`` or ``WPA2/WPA3``."""
+        enc = self.encryption or {}
+        if not enc.get("enabled"):
+            return "Open"
+        versions = enc.get("wpa")
+        if not isinstance(versions, list) or not versions:
+            return "Secured"
+        labels = {1: "WPA", 2: "WPA2", 3: "WPA3"}
+        return "/".join(labels.get(v, f"WPA{v}") for v in sorted(set(versions)))
+
+    @property
+    def quality_percent(self) -> int | None:
+        """Signal quality as 0-100, or ``None`` if unavailable."""
+        if self.quality is None or not self.quality_max:
+            return None
+        return round(self.quality * 100 / self.quality_max)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> WifiNetwork:
+        enc = data.get("encryption")
+        return cls(
+            ssid=_opt_str(data.get("ssid")) or "",
+            bssid=_opt_str(data.get("bssid")),
+            encryption=enc if isinstance(enc, dict) else None,
+            channel=_opt_int(data.get("channel")),
+            signal=_opt_int(data.get("signal")),
+            quality=_opt_int(data.get("quality")),
+            quality_max=_opt_int(data.get("quality_max")),
+            raw=data,
+        )
+
+
+@dataclass(slots=True)
+class WifiStatus:
+    """The bridge's current Wi-Fi connection (`wificonf` read).
+
+    The bridge reports only the connection, not the stored credentials — there
+    is no password here, and none is exposed by the API. Setting Wi-Fi is a
+    separate write (:meth:`RyseBridge.async_set_wifi_config`).
+    """
+
+    ssid: str | None
+    connected: bool
+    ip_address: str | None = None
+    raw: dict[str, Any] = field(default_factory=dict, repr=False)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> WifiStatus:
+        return cls(
+            ssid=_opt_str(data.get("ssid")),
+            connected=bool(data.get("connected", False)),
+            ip_address=_opt_str(_first(data, "ipv4address", "ip", "ipaddress")),
+            raw=data,
+        )
+
+
+def _first(data: dict[str, Any], *keys: str) -> Any:
+    for k in keys:
+        if k in data and data[k] is not None:
+            return data[k]
+    return None
 
 
 def _opt_int(value: Any) -> int | None:

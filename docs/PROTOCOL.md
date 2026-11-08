@@ -100,39 +100,43 @@ About 15 guessed GET paths (`routines`, `scenes`, `routine`, `routinelist`,
 `wificonf`. Routines are probably stored and run by the app or the cloud.
 Confirming this needs a capture of the app creating and running a routine.
 
-## Wi-Fi provisioning (documented, not wrapped)
+## Wi-Fi
 
-The bridge's setup web page uses two endpoints to put the bridge on a Wi-Fi
-network. They are documented here for completeness, from the setup page's own
-JavaScript; `pyryse` deliberately does **not** wrap them (see the note at the
-end). The fields and shapes below are the client code's, not captured traffic.
+The bridge runs Wi-Fi and Ethernet at once. These endpoints work over either,
+so they are safe to use while the bridge is wired, and `pyryse` wraps them.
 
-### `GET /lua/device/<dvc_id>/wifiscan`
-Lists nearby networks for the setup UI to choose from.
+### `GET /lua/device/<dvc_id>/wifiscan` - nearby networks
+Returns `{"results": [ ... ]}`. Each result:
 
-### `POST /lua/device/<dvc_id>/wificonf`
-Sets the Wi-Fi network. Body is a JSON object the setup page builds as:
+| field | meaning |
+|---|---|
+| `ssid`, `bssid`, `channel` | network identity |
+| `signal` | dBm (negative; closer to 0 is stronger) |
+| `quality`, `quality_max` | link quality out of a max (e.g. 35/70) |
+| `encryption` | object: `{"enabled": bool, "wpa": [1\|2\|3...], "authentication": ["psk"\|"sae"...], "ciphers": ["tkip"\|"ccmp"...]}` |
+| `mode`, `ht_operation`, `vht_operation` | PHY details |
 
-| field | when sent | meaning |
+`WifiNetwork.security` summarises `encryption` as `Open`, `WPA2`, `WPA2/WPA3`, etc.
+
+### `GET /lua/device/<dvc_id>/wificonf` - current connection
+Returns the current Wi-Fi **status**, not credentials:
+`{"ssid": "...", "connected": true|false, "ipv4address": "..."}`. When Wi-Fi is
+not joined (e.g. the bridge is on Ethernet) `connected` is false and
+`ipv4address` is `0.0.0.0/0`. **The stored password is not returned by the API.**
+
+### `POST /lua/device/<dvc_id>/wificonf` - set the network
+Body (from the setup page, confirmed by the response schema):
+
+| field | when | meaning |
 |---|---|---|
-| `ssid` | always | the network name |
-| `key` | when a password field is shown | the network password |
-| `username` | WPA-Enterprise only | the enterprise identity |
-| `security` | on the hidden-network path | one of `None`, `WPA`, `WPA2`, `WPA3`, `WPA-Enterprise`, `WPA2-Enterprise` |
+| `ssid` | always | network name |
+| `key` | password-protected networks | the password |
+| `username` | WPA-Enterprise | enterprise identity |
+| `security` | optional | `None`, `WPA`, `WPA2`, `WPA3`, `WPA-Enterprise`, `WPA2-Enterprise` |
 
-When the bridge's local security is on, both requests carry the
-`Authorization: <serial>` header, same as the rest of the API; when it is off
-(the default), they do not.
+When local security is on, all three carry the `Authorization: <serial>` header.
 
-### Why `pyryse` does not wrap these
+**Safety:** because Ethernet stays up independently, a wrong SSID/password only
+breaks the Wi-Fi link, not the wired one. On a Wi-Fi-only bridge, a bad write
+would take it offline.
 
-- They are **provisioning-time** operations: the setup page uses them *before*
-  the bridge is on the network. A library and the Home Assistant integration
-  only reach the bridge once it is already on the network, so there is nothing
-  to provision.
-- A bad `wificonf` write can move the bridge to a network it can't reach and
-  take it offline. The integration keeps away from anything that can do that.
-- `wificonf` is unauthenticated when local security is off (see
-  `ryse-smartbridge-disclosure.md` in the integration author's notes); wrapping
-  it would be handing out a remote "change this bridge's network" call. Left
-  undocumented beyond this shape on purpose.
