@@ -12,7 +12,14 @@ from .exceptions import (
     RyseNotFoundError,
     RyseResponseError,
 )
-from .models import Device, Gear
+from .models import (
+    SPEED_MAX,
+    SPEED_MIN,
+    Device,
+    Gear,
+    percent_to_speed,
+    speed_to_percent,
+)
 
 DEFAULT_TIMEOUT = 10.0
 
@@ -96,6 +103,72 @@ class RyseBridge:
             f"/lua/device/{dvc}/gear/{gear_id}/position",
             json={"position": position},
         )
+
+    async def async_get_speed(self, gear_id: str) -> int:
+        """Read a gear's speed in the bridge's native scale (40-100)."""
+        data = await self._gear_get(gear_id, "speed")
+        return self._int_field(data, "speed")
+
+    async def async_set_speed(self, gear_id: str, speed: int) -> None:
+        """Set a gear's speed in the bridge's native scale (40-100).
+
+        The bridge rejects values below 40 and above 100, so those raise
+        :class:`ValueError` here instead of a bare HTTP 405. The new value can
+        take a few seconds to show up when read back.
+        """
+        speed = int(speed)
+        if not SPEED_MIN <= speed <= SPEED_MAX:
+            raise ValueError(
+                f"speed must be between {SPEED_MIN} and {SPEED_MAX}, got {speed}"
+            )
+        dvc = await self._ensure_device_id()
+        await self._request(
+            "POST",
+            f"/lua/device/{dvc}/gear/{gear_id}/speed",
+            json={"speed": speed},
+        )
+
+    async def async_get_speed_percent(self, gear_id: str) -> int:
+        """Read a gear's speed on the RYSE app's 0-100% scale."""
+        return speed_to_percent(await self.async_get_speed(gear_id))
+
+    async def async_set_speed_percent(self, gear_id: str, percent: int) -> None:
+        """Set a gear's speed on the RYSE app's 0-100% scale (clamped)."""
+        await self.async_set_speed(gear_id, percent_to_speed(percent))
+
+    async def async_get_obstacle_detection(self, gear_id: str) -> bool:
+        """Whether obstacle detection is enabled on a gear."""
+        data = await self._gear_get(gear_id, "obstacle_detection")
+        return bool(self._int_field(data, "obstacle_detection"))
+
+    async def async_set_obstacle_detection(
+        self, gear_id: str, enabled: bool
+    ) -> None:
+        """Enable or disable obstacle detection on a gear.
+
+        The new value can take a few seconds to show up when read back.
+        """
+        dvc = await self._ensure_device_id()
+        await self._request(
+            "POST",
+            f"/lua/device/{dvc}/gear/{gear_id}/obstacle_detection",
+            json={"obstacle_detection": 1 if enabled else 0},
+        )
+
+    async def _gear_get(self, gear_id: str, setting: str) -> Any:
+        dvc = await self._ensure_device_id()
+        return await self._request(
+            "GET", f"/lua/device/{dvc}/gear/{gear_id}/{setting}"
+        )
+
+    @staticmethod
+    def _int_field(data: Any, key: str) -> int:
+        if not isinstance(data, dict) or key not in data:
+            raise RyseResponseError(f"Unexpected {key} response")
+        try:
+            return int(data[key])
+        except (TypeError, ValueError) as err:
+            raise RyseResponseError(f"Non-numeric {key} response") from err
 
     async def _ensure_device_id(self) -> str:
         """Resolve and cache the bridge's ``dvc_id``.

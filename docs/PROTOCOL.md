@@ -83,8 +83,9 @@ here run 5.3.2, so this rule was not tested.
 
 ## Other gear and device fields
 
-- `power_type`: 2 on every gear. Battery is the likely meaning, since gears report
-  `power_level`, but this is unconfirmed.
+- `power_type`: 2 on battery, 0 on an AC adapter, 1 on a USB charger. Observed on
+  gear 2 as its power source was swapped; RYSE doesn't document it. With the AC
+  adapter or USB charger connected, `power_level` read 100.
 - `machine_state`: 3 on every gear, unchanged across the sweep. Meaning unknown.
 - `gear_type`: 2 on every gear. Meaning unknown.
 - `stats`: `{"gear_not_found": 0}` on every gear.

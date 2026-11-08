@@ -48,19 +48,39 @@ reverse-engineered API.
 
 ## Per-gear settings
 
-Each gear also has a speed and an obstacle-detection setting, read and written
-through the bridge. The library doesn't wrap these yet; the endpoints are in
-[`docs/PROTOCOL.md`](docs/PROTOCOL.md).
+Speed and obstacle detection are per shade.
 
-- **Speed:** the bridge accepts 40-100. The app shows 0-100%, linear over that
-  range: `app % = (bridge - 40) / 60 * 100`, so `bridge = 40 + 0.6 * app %`.
-  Values outside 40-100 are rejected.
-- **Obstacle detection:** on or off per gear.
-- **Power type:** `power_type` is 2 on battery, 0 on AC adapter and 1 on a USB
-  charger (inferred from observed changes).
+```python
+from pyryse import PowerType
 
-Settings take a few seconds to apply, so read back after a short delay before
-assuming a write failed.
+gear_id = device.gears[0].id
+
+# Speed, on the RYSE app's 0-100% scale.
+await bridge.async_set_speed_percent(gear_id, 10)
+print(await bridge.async_get_speed_percent(gear_id))
+
+# Obstacle detection.
+await bridge.async_set_obstacle_detection(gear_id, True)
+print(await bridge.async_get_obstacle_detection(gear_id))
+
+# Read-only helpers on a Gear from async_get_device():
+gear = device.gears[0]
+gear.speed_percent                 # app percentage, or None
+gear.obstacle_detection_enabled    # bool, or None
+gear.power_source is PowerType.BATTERY
+```
+
+- **Speed:** the bridge accepts 40-100, and the app shows 0-100% over that
+  range (`app % = (bridge - 40) / 60 * 100`). `async_set_speed` takes the raw
+  bridge value and raises `ValueError` outside 40-100, since the bridge answers
+  with a bare HTTP 405. `speed_to_percent` and `percent_to_speed` convert. Not
+  every percentage survives a round trip: the bridge has 61 values for 101
+  percentages.
+- **Power type:** `PowerType.BATTERY` (2), `AC_ADAPTER` (0) and `USB_CHARGER`
+  (1). These are inferred from watching one shade's power source change; RYSE
+  doesn't document them. Unrecognised values give `PowerType.UNKNOWN`.
+- **Timing:** settings take a few seconds to apply, so a read right after a
+  write may show the old value.
 
 **Routines** (the app's name for scenes) are not available through the local
 API. Their endpoints are not known.

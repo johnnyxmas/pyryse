@@ -1,10 +1,23 @@
 # Changelog
 
-## Unreleased
+## 0.3.0
 
-- Documentation only: per-gear speed and obstacle-detection endpoints, the
-  speed mapping (bridge 40-100 to app 0-100%), power-type values, and the
-  finding that routines are not exposed locally. See `docs/PROTOCOL.md`.
+- Added `async_get_speed`, `async_set_speed`, `async_get_speed_percent` and
+  `async_set_speed_percent`. Speed is 40-100 on the bridge and 0-100% in the
+  RYSE app; `speed_to_percent` and `percent_to_speed` convert, using the
+  mapping verified against the app. `async_set_speed` raises `ValueError`
+  outside 40-100.
+- Added `async_get_obstacle_detection` and `async_set_obstacle_detection`.
+- Added the `PowerType` enum and `Gear.power_source`, plus
+  `Gear.speed_percent`, `Gear.obstacle_detection_enabled` and `Gear.stats`.
+- `Device` now carries `app_versions`, `ifttt_enable`, `wan_iface`,
+  `timezone_city`, `timezone_posix`, `latitude` and `longitude`.
+- **Fix:** `Device.app_version` used to hold the Python repr of a dictionary,
+  because the bridge reports a dictionary of component versions. The full
+  dictionary is now `Device.app_versions`, and `app_version` returns the main
+  (`lua`) component's version.
+- Documented in `docs/PROTOCOL.md`: the settings endpoints, the settle delay,
+  power-type values, and that routines are not exposed locally.
 
 ## 0.2.0
 
