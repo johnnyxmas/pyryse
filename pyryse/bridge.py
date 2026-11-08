@@ -54,17 +54,17 @@ class RyseBridge:
         return self._device_id
 
     async def async_get_device(self) -> Device:
-        """Fetch the bridge and all its gears."""
-        data = await self._request("GET", "/lua/device")
-        if isinstance(data, list):
-            if not data:
-                raise RyseResponseError("Empty /lua/device response")
-            data = data[0]
+        """Fetch the bridge and all its gears with full detail.
+
+        Uses the detailed ``/lua/device/<dvc_id>`` endpoint, which includes
+        battery (``power_level``) and firmware fields. The device id is
+        resolved once from the list endpoint and cached.
+        """
+        dvc = await self._ensure_device_id()
+        data = await self._request("GET", f"/lua/device/{dvc}")
         if not isinstance(data, dict) or "dvc_id" not in data:
-            raise RyseResponseError("Unexpected /lua/device response")
-        device = Device.from_dict(data)
-        self._device_id = device.id
-        return device
+            raise RyseResponseError("Unexpected device response")
+        return Device.from_dict(data)
 
     async def async_get_gears(self) -> list[Gear]:
         """Convenience: just the gears from :meth:`async_get_device`."""
@@ -98,9 +98,21 @@ class RyseBridge:
         )
 
     async def _ensure_device_id(self) -> str:
-        if self._device_id is None:
-            await self.async_get_device()
-        assert self._device_id is not None  # noqa: S101
+        """Resolve and cache the bridge's ``dvc_id``.
+
+        Uses the list endpoint (``/lua/device``), which does not require a
+        known id, so this never recurses into :meth:`async_get_device`.
+        """
+        if self._device_id is not None:
+            return self._device_id
+        data = await self._request("GET", "/lua/device")
+        if isinstance(data, list):
+            if not data:
+                raise RyseResponseError("Empty /lua/device response")
+            data = data[0]
+        if not isinstance(data, dict) or "dvc_id" not in data:
+            raise RyseResponseError("Unexpected /lua/device response")
+        self._device_id = str(data["dvc_id"])
         return self._device_id
 
     async def _request(

@@ -16,37 +16,54 @@ from pyryse import (
 
 HOST = "192.168.0.123"
 DVC = "xd7JZVuNW"
+LIST_URL = f"http://{HOST}/lua/device"
+DETAIL_URL = f"http://{HOST}/lua/device/{DVC}"
 
-DEVICE_PAYLOAD = [
+# The list endpoint (`GET /lua/device`) is sparse: just enough to find dvc_id
+# and get a quick read of each gear's position/online state.
+LIST_PAYLOAD = [
     {
         "dvc_name": "RYSE SmartBridge",
         "dvc_id": DVC,
-        "dvc_mac": "d0:16:f0:20:64:89",
-        "dvc_ip": HOST,
-        "dvc_online": True,
-        "dvc_fw_version": "1.2.3",
-        "local_security_enable": False,
         "gears": [
-            {
-                "id": "c34ae8d8c52b",
-                "name": "2",
-                "position": 0,
-                "position_state": 0,
-                "online": True,
-                "power_level": 64,
-                "fw_version": "5.3.2",
-                "serial_number": "SECRET",
-            },
-            {
-                "id": "f4e324d59c02",
-                "name": "1",
-                "position": 54,
-                "position_state": 2,
-                "online": False,
-            },
+            {"id": "c34ae8d8c52b", "name": "2", "position": 0,
+             "position_state": 0, "online": True},
+            {"id": "f4e324d59c02", "name": "1", "position": 54,
+             "position_state": 2, "online": False},
         ],
     }
 ]
+
+# The detailed endpoint (`GET /lua/device/<dvc_id>`) carries everything,
+# including battery (power_level), firmware/hardware versions and serials.
+DETAIL_PAYLOAD = {
+    "dvc_name": "RYSE SmartBridge",
+    "dvc_id": DVC,
+    "dvc_mac": "d0:16:f0:20:64:89",
+    "dvc_ip": HOST,
+    "dvc_online": True,
+    "dvc_fw_version": "1.2.3",
+    "local_security_enable": False,
+    "gears": [
+        {
+            "id": "c34ae8d8c52b",
+            "name": "2",
+            "position": 0,
+            "position_state": 0,
+            "online": True,
+            "power_level": 64,
+            "fw_version": "5.3.2",
+            "serial_number": "SECRET",
+        },
+        {
+            "id": "f4e324d59c02",
+            "name": "1",
+            "position": 54,
+            "position_state": 2,
+            "online": False,
+        },
+    ],
+}
 
 
 @pytest.fixture
@@ -57,7 +74,8 @@ async def session():
 
 async def test_get_device_parses(session):
     with aioresponses() as m:
-        m.get(f"http://{HOST}/lua/device", payload=DEVICE_PAYLOAD)
+        m.get(LIST_URL, payload=LIST_PAYLOAD)
+        m.get(DETAIL_URL, payload=DETAIL_PAYLOAD)
         bridge = RyseBridge(HOST, session)
         device = await bridge.async_get_device()
 
@@ -82,9 +100,23 @@ async def test_get_device_parses(session):
     assert offline.is_moving is False
 
 
+async def test_device_id_is_cached_after_first_fetch(session):
+    """A second async_get_device() must not re-hit the list endpoint."""
+    with aioresponses() as m:
+        m.get(LIST_URL, payload=LIST_PAYLOAD)
+        m.get(DETAIL_URL, payload=DETAIL_PAYLOAD)
+        m.get(DETAIL_URL, payload=DETAIL_PAYLOAD)  # second detail fetch
+        bridge = RyseBridge(HOST, session)
+        await bridge.async_get_device()
+        await bridge.async_get_device()
+
+        list_calls = [k for k in m.requests if str(k[1]) == LIST_URL]
+    assert len(list_calls) == 1
+
+
 async def test_set_position_clamps_and_posts(session):
     with aioresponses() as m:
-        m.get(f"http://{HOST}/lua/device", payload=DEVICE_PAYLOAD)
+        m.get(LIST_URL, payload=LIST_PAYLOAD)
         url = f"http://{HOST}/lua/device/{DVC}/gear/c34ae8d8c52b/position"
         m.post(url, status=200, body="")
         bridge = RyseBridge(HOST, session)
@@ -100,17 +132,20 @@ async def test_set_position_clamps_and_posts(session):
 
 async def test_authorization_header_sent_with_serial(session):
     with aioresponses() as m:
-        m.get(f"http://{HOST}/lua/device", payload=DEVICE_PAYLOAD)
+        m.get(LIST_URL, payload=LIST_PAYLOAD)
+        m.get(DETAIL_URL, payload=DETAIL_PAYLOAD)
         bridge = RyseBridge(HOST, session, serial="MY-SERIAL")
         await bridge.async_get_device()
-        key = next(iter(m.requests))
-        headers = m.requests[key][0].kwargs["headers"]
-    assert headers == {"Authorization": "MY-SERIAL"}
+
+        headers_seen = [
+            calls[0].kwargs["headers"] for calls in m.requests.values()
+        ]
+    assert all(h == {"Authorization": "MY-SERIAL"} for h in headers_seen)
 
 
 async def test_bad_gear_raises_not_found(session):
     with aioresponses() as m:
-        m.get(f"http://{HOST}/lua/device", payload=DEVICE_PAYLOAD)
+        m.get(LIST_URL, payload=LIST_PAYLOAD)
         url = f"http://{HOST}/lua/device/{DVC}/gear/deadbeef/position"
         m.get(url, status=400)
         bridge = RyseBridge(HOST, session)
@@ -121,7 +156,7 @@ async def test_bad_gear_raises_not_found(session):
 async def test_connection_error(session):
     with aioresponses() as m:
         m.get(
-            f"http://{HOST}/lua/device",
+            LIST_URL,
             exception=aiohttp.ClientConnectionError("boom"),
         )
         bridge = RyseBridge(HOST, session)

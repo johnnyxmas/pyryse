@@ -25,7 +25,8 @@ async def main():
         bridge = RyseBridge("192.168.0.123", session)
         device = await bridge.async_get_device()
         for gear in device.gears:
-            print(gear.name, gear.position, gear.position_state.name, gear.online)
+            print(gear.name, gear.position, gear.position_state.name,
+                  gear.online, gear.battery)
 
         # Move a shade. Bridge scale: 0 = open, 100 = closed.
         await bridge.async_set_position(device.gears[0].id, 0)   # open
