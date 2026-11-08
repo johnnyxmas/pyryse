@@ -100,8 +100,39 @@ About 15 guessed GET paths (`routines`, `scenes`, `routine`, `routinelist`,
 `wificonf`. Routines are probably stored and run by the app or the cloud.
 Confirming this needs a capture of the app creating and running a routine.
 
-## Other endpoints (not used by pyryse)
+## Wi-Fi provisioning (documented, not wrapped)
 
-The setup page also uses `GET /lua/device/<dvc_id>/wifiscan` and
-`POST /lua/device/<dvc_id>/wificonf` for Wi-Fi provisioning. pyryse does not
-touch these.
+The bridge's setup web page uses two endpoints to put the bridge on a Wi-Fi
+network. They are documented here for completeness, from the setup page's own
+JavaScript; `pyryse` deliberately does **not** wrap them (see the note at the
+end). The fields and shapes below are the client code's, not captured traffic.
+
+### `GET /lua/device/<dvc_id>/wifiscan`
+Lists nearby networks for the setup UI to choose from.
+
+### `POST /lua/device/<dvc_id>/wificonf`
+Sets the Wi-Fi network. Body is a JSON object the setup page builds as:
+
+| field | when sent | meaning |
+|---|---|---|
+| `ssid` | always | the network name |
+| `key` | when a password field is shown | the network password |
+| `username` | WPA-Enterprise only | the enterprise identity |
+| `security` | on the hidden-network path | one of `None`, `WPA`, `WPA2`, `WPA3`, `WPA-Enterprise`, `WPA2-Enterprise` |
+
+When the bridge's local security is on, both requests carry the
+`Authorization: <serial>` header, same as the rest of the API; when it is off
+(the default), they do not.
+
+### Why `pyryse` does not wrap these
+
+- They are **provisioning-time** operations: the setup page uses them *before*
+  the bridge is on the network. A library and the Home Assistant integration
+  only reach the bridge once it is already on the network, so there is nothing
+  to provision.
+- A bad `wificonf` write can move the bridge to a network it can't reach and
+  take it offline. The integration keeps away from anything that can do that.
+- `wificonf` is unauthenticated when local security is off (see
+  `ryse-smartbridge-disclosure.md` in the integration author's notes); wrapping
+  it would be handing out a remote "change this bridge's network" call. Left
+  undocumented beyond this shape on purpose.
