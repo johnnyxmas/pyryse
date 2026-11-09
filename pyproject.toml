@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pyryse"
-version = "0.4.0"
+version = "0.5.0"
 description = "Local (no-cloud) async client for RYSE SmartShade via the RYSE SmartBridge."
 readme = "README.md"
 license = "MIT"

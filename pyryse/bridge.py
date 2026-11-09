@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from typing import Any
 
 import aiohttp
@@ -26,6 +27,12 @@ from .models import (
 
 DEFAULT_TIMEOUT = 10.0
 
+#: Minimum gap, in seconds, between commands (POSTs) sent to one bridge.
+#: The bridge silently drops a command when several arrive together: it
+#: answers 200 but one shade never moves. 0.5 s was verified to work for
+#: four shades; 0 disables the gap but commands are still sent one at a time.
+DEFAULT_COMMAND_INTERVAL = 0.5
+
 
 class RyseBridge:
     """Talks to a RYSE SmartBridge over its local HTTP API (no cloud).
@@ -42,6 +49,11 @@ class RyseBridge:
         ``Authorization`` header on every request.
     timeout:
         Per-request timeout in seconds.
+    command_interval:
+        Minimum seconds between commands (POST requests). Commands from
+        concurrent callers are queued and sent one at a time, because the
+        bridge silently drops some of a burst of simultaneous commands.
+        Reads (GET) are not throttled.
     """
 
     def __init__(
@@ -51,11 +63,17 @@ class RyseBridge:
         *,
         serial: str | None = None,
         timeout: float = DEFAULT_TIMEOUT,
+        command_interval: float = DEFAULT_COMMAND_INTERVAL,
     ) -> None:
+        if command_interval < 0:
+            raise ValueError("command_interval must not be negative")
         self._host = host
         self._session = session
         self._serial = serial
         self._timeout = timeout
+        self._command_interval = command_interval
+        self._command_lock = asyncio.Lock()
+        self._last_command: float | None = None
         self._device_id: str | None = None
 
     @property
@@ -246,6 +264,24 @@ class RyseBridge:
         return self._device_id
 
     async def _request(
+        self, method: str, path: str, *, json: dict[str, Any] | None = None
+    ) -> Any:
+        if method == "GET":
+            return await self._send(method, path, json=json)
+        # Commands are serialised and spaced out; see DEFAULT_COMMAND_INTERVAL.
+        async with self._command_lock:
+            if self._last_command is not None:
+                wait = self._command_interval - (
+                    time.monotonic() - self._last_command
+                )
+                if wait > 0:
+                    await asyncio.sleep(wait)
+            try:
+                return await self._send(method, path, json=json)
+            finally:
+                self._last_command = time.monotonic()
+
+    async def _send(
         self, method: str, path: str, *, json: dict[str, Any] | None = None
     ) -> Any:
         url = f"http://{self._host}{path}"

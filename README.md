@@ -35,6 +35,16 @@ async def main():
 If your bridge has local security enabled, pass the serial:
 `RyseBridge(host, session, serial="...")`.
 
+### Moving several shades at once
+
+The bridge silently drops a command when several arrive together: it answers
+`200`, but one shade never moves. `RyseBridge` therefore sends commands (POST
+requests) one at a time, at least `command_interval` seconds apart (default
+`0.5`). Concurrent calls such as `asyncio.gather(*(bridge.async_set_position(g, 0)
+for g in gears))` are queued automatically, so callers need no delays of their
+own. Reads are not throttled. Use one `RyseBridge` per bridge, since the queue
+is per instance.
+
 ## Position convention
 
 The bridge's `position` is the **inverse** of Home Assistant's cover scale:
