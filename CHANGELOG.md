@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.2
+
+- **Fix:** moving several shades at once could leave one behind. The bridge
+  silently drops a command when several arrive together: it returns `200`,
+  but that shade never moves. Seen with four shades from Home Assistant, where
+  each attempt missed a different one. `RyseBridge` now sends commands (all
+  POST requests) one at a time, at least `command_interval` seconds apart.
+- Added the `command_interval` argument to `RyseBridge` (default
+  `DEFAULT_COMMAND_INTERVAL`, 0.5 s, verified with four shades). `0` keeps
+  commands one at a time with no gap. Reads (GET) are not throttled.
+
 ## 0.4.0
 
 - Added Wi-Fi support (the bridge runs Wi-Fi and Ethernet at once, so these

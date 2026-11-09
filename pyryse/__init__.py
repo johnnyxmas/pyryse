@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .bridge import RyseBridge
+from .bridge import DEFAULT_COMMAND_INTERVAL, RyseBridge
 from .exceptions import (
     RyseConnectionError,
     RyseError,
@@ -25,6 +25,7 @@ from .models import (
 
 __all__ = [
     "RyseBridge",
+    "DEFAULT_COMMAND_INTERVAL",
     "Device",
     "Gear",
     "GearState",
@@ -42,4 +43,4 @@ __all__ = [
     "RyseNotFoundError",
 ]
 
-__version__ = "0.4.0"
+__version__ = "0.4.2"
