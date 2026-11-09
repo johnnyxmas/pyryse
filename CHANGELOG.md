@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.5.0
+## 0.4.2
 
 - **Fix:** moving several shades at once could leave one behind. The bridge
   silently drops a command when several arrive together: it returns `200`,
